@@ -1,4 +1,4 @@
-package ch.tbz.m321servicenoah.controller;
+package ch.tbz.m321orderservice.controller;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;

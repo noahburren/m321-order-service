@@ -1,4 +1,4 @@
-package ch.tbz.m321servicenoah.config;
+package ch.tbz.m321orderservice.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -18,8 +18,8 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("M321 Order Service API")
-                        .version("4.0.0")
-                        .description("OAuth2 Resource Server with Keycloak OIDC and RabbitMQ"))
+                        .version("5.0.0")
+                        .description("Order intake API with parallel v1/v2 migration and asynchronous RabbitMQ processing"))
                 .components(new Components()
                         .addSecuritySchemes("bearerJwt", new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)

@@ -1,53 +1,89 @@
 openapi: 3.0.3
 info:
   title: M321 Order Service API
-  description: Synchronous entry point for asynchronously processed orders.
-  version: 4.0.0
+  version: 5.0.0
+  description: REST entry point for orders. Processing is delegated asynchronously via RabbitMQ.
 servers:
   - url: http://localhost:8081
 paths:
-  /api/orders:
+  /api/v1/orders:
     post:
-      operationId: createOrder
-      summary: Accept a new order for asynchronous processing
-      description: Requires a Keycloak access token with realm role USER or ADMIN.
+      operationId: createOrderV1
+      summary: Accept an order using the stable v1 request
       security:
         - bearerJwt: []
-        - keycloakOidc: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateOrderRequest'
+              $ref: '#/components/schemas/CreateOrderV1Request'
             example:
               product: Keyboard
               quantity: 2
       responses:
         '202':
-          description: Order accepted and published to RabbitMQ
+          description: Order accepted and OrderCreated v1 published
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/CorrelationId'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OrderMessage'
+                $ref: '#/components/schemas/OrderAcceptedResponse'
               example:
-                orderId: 101
-                product: Keyboard
-                quantity: 2
-                createdAt: '2026-09-04T10:00:00Z'
+                orderId: 6fe4b9bb-d89d-43c2-af6a-cd6fa4b453ae
+                correlationId: demo-correlation-123
+                status: ACCEPTED
+                acceptedAt: '2026-09-18T08:00:00Z'
         '400':
-          description: Product is missing or quantity is not positive
+          description: Product is blank or quantity is below one
         '401':
-          description: Missing or invalid access token
+          description: Missing or invalid OAuth2 access token
         '403':
-          description: Token does not contain USER or ADMIN
+          description: Token has neither USER nor ADMIN role
+  /api/v2/orders:
+    post:
+      operationId: createOrderV2
+      summary: Accept an order using the new, incompatible v2 request shape
+      description: Runs in parallel with v1 during the expand-and-contract migration.
+      security:
+        - bearerJwt: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderV2Request'
+            example:
+              productCode: KEYBOARD-01
+              amount: 2
+      responses:
+        '202':
+          description: Order accepted and OrderCreated v1 published
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAcceptedResponse'
+        '400':
+          description: Product code is blank or amount is below one
+        '401':
+          description: Missing or invalid OAuth2 access token
+        '403':
+          description: Token has neither USER nor ADMIN role
   /api/admin:
     get:
       operationId: getAdminInfo
-      summary: Verify ADMIN access and show the authenticated JWT identity
+      summary: Verify ADMIN access
       security:
         - bearerJwt: []
-        - keycloakOidc: []
       responses:
         '200':
           description: ADMIN access granted
@@ -56,33 +92,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminInfo'
         '401':
-          description: Missing or invalid access token
+          description: Missing or invalid OAuth2 access token
         '403':
           description: Token does not contain ADMIN
-  /api/consumers/stop:
-    post:
-      operationId: stopConsumers
-      summary: Stop the RabbitMQ consumers (authenticated users only)
-      security:
-        - bearerJwt: []
-        - keycloakOidc: []
-      responses:
-        '200':
-          description: Consumers stopped
-        '401':
-          description: Missing or invalid access token
-  /api/consumers/start:
-    post:
-      operationId: startConsumers
-      summary: Start the RabbitMQ consumers (authenticated users only)
-      security:
-        - bearerJwt: []
-        - keycloakOidc: []
-      responses:
-        '200':
-          description: Consumers started
-        '401':
-          description: Missing or invalid access token
 components:
   securitySchemes:
     bearerJwt:
@@ -93,28 +105,58 @@ components:
     keycloakOidc:
       type: openIdConnect
       openIdConnectUrl: http://localhost:8080/realms/m321/.well-known/openid-configuration
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Existing workflow identifier. A UUID is generated when omitted.
+      schema:
+        type: string
+      example: demo-correlation-123
+  headers:
+    CorrelationId:
+      description: Effective correlation ID, supplied by the client or generated by the service
+      schema:
+        type: string
   schemas:
-    CreateOrderRequest:
+    CreateOrderV1Request:
       type: object
+      additionalProperties: false
       required: [product, quantity]
       properties:
         product:
           type: string
+          minLength: 1
         quantity:
           type: integer
           minimum: 1
-    OrderMessage:
-      allOf:
-        - $ref: '#/components/schemas/CreateOrderRequest'
-        - type: object
-          required: [orderId, createdAt]
-          properties:
-            orderId:
-              type: integer
-              format: int64
-            createdAt:
-              type: string
-              format: date-time
+    CreateOrderV2Request:
+      type: object
+      additionalProperties: false
+      required: [productCode, amount]
+      properties:
+        productCode:
+          type: string
+          minLength: 1
+        amount:
+          type: integer
+          minimum: 1
+    OrderAcceptedResponse:
+      type: object
+      required: [orderId, correlationId, status, acceptedAt]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+        status:
+          type: string
+          enum: [ACCEPTED]
+        acceptedAt:
+          type: string
+          format: date-time
     AdminInfo:
       type: object
       required: [subject, username, message]

@@ -1,4 +1,4 @@
-package ch.tbz.m321servicenoah.security;
+package ch.tbz.m321orderservice.security;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -36,7 +36,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers("/api/admin").hasRole("ADMIN")
-                        .requestMatchers("/api/orders").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/api/v1/orders", "/api/v2/orders").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth2 -> oauth2

@@ -1,78 +1,117 @@
 asyncapi: 3.0.0
 info:
-  title: M321 Order Service Messaging API
-  version: 2.0.0
-  description: Asynchronous order processing and processed-order events over RabbitMQ.
+  title: M321 Order Processing Contracts
+  version: 1.0.0
+  description: RabbitMQ contracts shared by the independently deployable Order and Processing services.
+defaultContentType: application/json
 servers:
   localRabbitMQ:
     host: localhost:5672
     protocol: amqp
+    description: Local durable RabbitMQ broker
 channels:
-  orderProcessing:
-    address: orders.processing
-    description: Durable work queue shared by OrderWorker1 and OrderWorker2.
+  orderCreatedV1:
+    address: order.created.v1
+    description: Order Service publishes to the orders.events topic exchange using this routing key.
+    x-exchange: orders.events
+    x-queue: orders.processing
+    x-routing-key: order.created.v1
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: orders.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
     messages:
-      orderMessage:
-        $ref: '#/components/messages/OrderMessage'
-  orderProcessed:
-    address: orders.processed
-    description: Fanout exchange for successfully processed orders.
+      OrderCreatedV1:
+        $ref: '#/components/messages/OrderCreatedV1'
+  orderProcessedV1:
+    address: order.processed.v1
+    description: Processing Service publishes to the orders.events topic exchange using this routing key.
+    x-exchange: orders.events
+    x-queue: orders.order-service.processed
+    x-routing-key: order.processed.v1
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: orders.events
+          type: topic
+          durable: true
+          autoDelete: false
+        bindingVersion: 0.3.0
     messages:
-      orderProcessedEvent:
-        $ref: '#/components/messages/OrderProcessedEvent'
-  notificationQueue:
-    address: orders.notification
-    description: Durable queue bound to orders.processed for notifications.
-    messages:
-      orderProcessedEvent:
-        $ref: '#/components/messages/OrderProcessedEvent'
-  auditQueue:
-    address: orders.audit
-    description: Durable queue bound to orders.processed for audit entries.
-    messages:
-      orderProcessedEvent:
-        $ref: '#/components/messages/OrderProcessedEvent'
+      OrderProcessedV1:
+        $ref: '#/components/messages/OrderProcessedV1'
 operations:
-  publishOrder:
+  publishOrderCreatedV1:
     action: send
+    summary: Order Service publishes an accepted order without waiting for processing.
     channel:
-      $ref: '#/channels/orderProcessing'
-  processOrder:
+      $ref: '#/channels/orderCreatedV1'
+    messages:
+      - $ref: '#/channels/orderCreatedV1/messages/OrderCreatedV1'
+  consumeOrderProcessedV1:
     action: receive
+    summary: Order Service consumes the Processing Service result idempotently.
     channel:
-      $ref: '#/channels/orderProcessing'
-  publishOrderProcessed:
-    action: send
-    channel:
-      $ref: '#/channels/orderProcessed'
-  sendNotification:
-    action: receive
-    channel:
-      $ref: '#/channels/notificationQueue'
-  createAuditEntry:
-    action: receive
-    channel:
-      $ref: '#/channels/auditQueue'
+      $ref: '#/channels/orderProcessedV1'
+    messages:
+      - $ref: '#/channels/orderProcessedV1/messages/OrderProcessedV1'
 components:
   messages:
-    OrderMessage:
-      name: OrderMessage
+    OrderCreatedV1:
+      name: OrderCreated
+      title: OrderCreated v1
       contentType: application/json
+      correlationId:
+        location: $message.payload#/correlationId
       payload:
-        $ref: '#/components/schemas/OrderMessagePayload'
-    OrderProcessedEvent:
-      name: OrderProcessedEvent
+        $ref: '#/components/schemas/OrderCreatedV1Payload'
+      examples:
+        - name: keyboardOrder
+          payload:
+            eventId: 44ca29b2-3c50-4b7c-8fd5-87864916b98a
+            correlationId: demo-correlation-123
+            orderId: 6fe4b9bb-d89d-43c2-af6a-cd6fa4b453ae
+            product: Keyboard
+            quantity: 2
+            createdAt: '2026-09-18T08:00:00Z'
+            eventVersion: 1
+    OrderProcessedV1:
+      name: OrderProcessed
+      title: OrderProcessed v1
       contentType: application/json
+      correlationId:
+        location: $message.payload#/correlationId
       payload:
-        $ref: '#/components/schemas/OrderProcessedEventPayload'
+        $ref: '#/components/schemas/OrderProcessedV1Payload'
+      examples:
+        - name: processedOrder
+          payload:
+            eventId: 0bd7601e-10d7-4fab-b615-f2b12445b676
+            correlationId: demo-correlation-123
+            orderId: 6fe4b9bb-d89d-43c2-af6a-cd6fa4b453ae
+            processedAt: '2026-09-18T08:00:03Z'
+            status: PROCESSED
+            eventVersion: 1
   schemas:
-    OrderMessagePayload:
+    OrderCreatedV1Payload:
       type: object
-      required: [orderId, product, quantity, createdAt]
+      additionalProperties: true
+      required: [eventId, correlationId, orderId, product, quantity, createdAt, eventVersion]
       properties:
+        eventId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
         orderId:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         product:
           type: string
         quantity:
@@ -81,30 +120,28 @@ components:
         createdAt:
           type: string
           format: date-time
-      examples:
-        - orderId: 101
-          product: Keyboard
-          quantity: 2
-          createdAt: '2026-09-04T10:00:00Z'
-    OrderProcessedEventPayload:
+        eventVersion:
+          type: integer
+          const: 1
+    OrderProcessedV1Payload:
       type: object
-      required: [orderId, product, quantity, processedAt, processedBy]
+      additionalProperties: true
+      required: [eventId, correlationId, orderId, processedAt, status, eventVersion]
       properties:
-        orderId:
-          type: integer
-          format: int64
-        product:
+        eventId:
           type: string
-        quantity:
-          type: integer
+          format: uuid
+        correlationId:
+          type: string
+        orderId:
+          type: string
+          format: uuid
         processedAt:
           type: string
           format: date-time
-        processedBy:
+        status:
           type: string
-      examples:
-        - orderId: 101
-          product: Keyboard
-          quantity: 2
-          processedAt: '2026-09-04T10:00:03Z'
-          processedBy: OrderWorker1
+          example: PROCESSED
+        eventVersion:
+          type: integer
+          const: 1
