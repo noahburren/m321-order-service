@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: M321 Order Service API
   description: Synchronous entry point for asynchronously processed orders.
-  version: 3.0.0
+  version: 4.0.0
 servers:
   - url: http://localhost:8081
 paths:
@@ -10,6 +10,10 @@ paths:
     post:
       operationId: createOrder
       summary: Accept a new order for asynchronous processing
+      description: Requires a Keycloak access token with realm role USER or ADMIN.
+      security:
+        - bearerJwt: []
+        - keycloakOidc: []
       requestBody:
         required: true
         content:
@@ -33,7 +37,62 @@ paths:
                 createdAt: '2026-09-04T10:00:00Z'
         '400':
           description: Product is missing or quantity is not positive
+        '401':
+          description: Missing or invalid access token
+        '403':
+          description: Token does not contain USER or ADMIN
+  /api/admin:
+    get:
+      operationId: getAdminInfo
+      summary: Verify ADMIN access and show the authenticated JWT identity
+      security:
+        - bearerJwt: []
+        - keycloakOidc: []
+      responses:
+        '200':
+          description: ADMIN access granted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminInfo'
+        '401':
+          description: Missing or invalid access token
+        '403':
+          description: Token does not contain ADMIN
+  /api/consumers/stop:
+    post:
+      operationId: stopConsumers
+      summary: Stop the RabbitMQ consumers (authenticated users only)
+      security:
+        - bearerJwt: []
+        - keycloakOidc: []
+      responses:
+        '200':
+          description: Consumers stopped
+        '401':
+          description: Missing or invalid access token
+  /api/consumers/start:
+    post:
+      operationId: startConsumers
+      summary: Start the RabbitMQ consumers (authenticated users only)
+      security:
+        - bearerJwt: []
+        - keycloakOidc: []
+      responses:
+        '200':
+          description: Consumers started
+        '401':
+          description: Missing or invalid access token
 components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth2 access token issued by the m321 Keycloak realm
+    keycloakOidc:
+      type: openIdConnect
+      openIdConnectUrl: http://localhost:8080/realms/m321/.well-known/openid-configuration
   schemas:
     CreateOrderRequest:
       type: object
@@ -56,3 +115,13 @@ components:
             createdAt:
               type: string
               format: date-time
+    AdminInfo:
+      type: object
+      required: [subject, username, message]
+      properties:
+        subject:
+          type: string
+        username:
+          type: string
+        message:
+          type: string
