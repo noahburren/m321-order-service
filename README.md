@@ -1,7 +1,10 @@
 # M321 Order Service
 
-**Owner:** Noah  
-**Purpose:** Order Service of the distributed Order Processing System for module M321.
+Service: Order Service
+
+Repository: m321-order-service
+
+Owner: Noah
 
 Dieses Repository (`m321-order-service`) enthält ausschliesslich Noahs **Order Service**. Er nimmt Bestellungen per REST an, erzeugt ein `OrderCreated`-Event und delegiert die Verarbeitung asynchron an Levis separat deploybaren Processing Service. Es gibt keinen direkten Datenzugriff zwischen den Services und keinen gemeinsam genutzten Java-Domain-Code.
 
